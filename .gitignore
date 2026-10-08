@@ -1,0 +1,38 @@
+# Private input lists and outputs (the real app portfolio never goes to git).
+# Public sample input lives in examples/.
+/apps.txt
+/apps*.txt
+/sonuc.csv
+*.csv
+
+# Local monitor state: run history, investigation cases, reports
+.monitor/
+reports/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Claude Code per-user settings
+.claude/settings.local.json
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
