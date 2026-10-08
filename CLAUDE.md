@@ -20,7 +20,8 @@ python3 -m unittest tests.test_checker.ClassificationTest.test_globally_removed_
 
 - `store_client.py` is the **only** module that does network I/O (`StoreClient`, with an injectable `opener` and `sleep`). Retries cover network errors, 429 and 5xx. The page signal is tri-state: only 404/410 mean "gone", other failures are `None` (unknown).
 - `checker.py` maps the two signals (lookup + page, plus one fallback-storefront lookup) to `Status`. It records raw signals in `CheckResult.signals` for history and investigations.
-- `models.py` holds the shared contracts. `parsing.py` handles input lines. `report.py` only presents results. `cli.py` is the argparse entry point (`python3 -m store_monitor <command>`).
+- `history.py` stores one JSON file per run in `.monitor/runs/` (run ID = UTC timestamp, so names sort by time). `build_baselines` finds each app's last known non-ERROR result, keyed by `app_id@country`. `changes.py` compares the current run with those baselines (NEW / CHECK_FAILED / STATUS_CHANGE). Only STATUS_CHANGE counts as an anomaly worth investigating.
+- `models.py` holds the shared contracts. `parsing.py` handles input lines. `report.py` only presents results. `cli.py` is the argparse entry point (`python3 -m store_monitor check|history`).
 - Tests use `tests/fakes.py` (`FakeClient` for checker scenarios, `ScriptedOpener` for HTTP behavior). Never hit the network in tests.
 
 ## Design rules (from the project brief)
