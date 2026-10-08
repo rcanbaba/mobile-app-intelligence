@@ -11,7 +11,7 @@ The first (and currently only) component is **App Store Monitor**.
 > | Milestone | State |
 > |---|---|
 > | Deterministic checker as a package, offline tests | ✅ |
-> | Local run history + change/anomaly detection | 🚧 |
+> | Local run history + change/anomaly detection | ✅ |
 > | Human-approved agentic investigation (Claude Code) | 🚧 |
 > | Agent evaluation scenarios | 🚧 |
 
@@ -135,7 +135,16 @@ python3 -m store_monitor check apps.txt --csv out.csv # also export CSV
 python3 -m store_monitor check --only problem         # REMOVED/UNCERTAIN/ERROR/...
 python3 -m store_monitor check -w 12                  # 12 parallel workers
 pbpaste | python3 -m store_monitor check -            # from clipboard (macOS)
+python3 -m store_monitor check --no-history           # one-off check, nothing saved
+
+# history
+python3 -m store_monitor history                      # list past runs
+python3 -m store_monitor history 389801252            # one app's timeline
+python3 -m store_monitor history 389801252 --json     # machine-readable
 ```
+
+Every `check` compares the new results with local history and then saves the run to
+`.monitor/runs/` (git-ignored; `--state-dir` changes the location).
 
 Tests run offline. Network responses are scripted:
 
@@ -181,6 +190,32 @@ Each app gets two independent signals, which are cross-checked:
 Neither signal is trusted alone because the lookup API sometimes serves stale cached
 answers. The fallback storefront is `us`, or `gb` when the app's own storefront is already `us`.
 
+### History and change detection
+
+Each run is saved as one JSON file. An app's history identity is
+`app_id@storefront`: the same app can be LIVE in one country and missing in another.
+
+| Situation | Result | Investigation offered? |
+|---|---|---|
+| App not in history yet | `NEW`: this run is its baseline | No |
+| Same status as last known | unchanged, not listed | No |
+| Different status (e.g. `LIVE → REMOVED`, `UNCERTAIN → LIVE`) | `STATUS_CHANGE`, shown with current and previous evidence | Yes |
+| Check returned `ERROR` | `CHECK_FAILED`, shown with consecutive-error count | No (rerun first) |
+
+"Last known" skips `ERROR` results. So `LIVE → ERROR → LIVE` is not a change, and
+`LIVE → ERROR → REMOVED` is reported as `LIVE → REMOVED`. A network failure is a
+fact about the check, not about the app.
+
+```
+History: compared with 4 previous run(s).
+42 apps checked. 40 unchanged. 2 status change(s), 0 failed check(s), 0 new.
+
+Status changes:
+  App A  123456789@us  LIVE → REMOVED
+    now:    lookup empty, GB lookup empty, page 404
+    before: lookup found, page 200 (run 20261008T091500Z)
+```
+
 ## 10. Agent investigation 🚧
 
 The plan for V1:
@@ -202,6 +237,8 @@ Two separate layers:
 **Deterministic tests** (`tests/`, ✅). Classification logic runs against scripted signals:
 normal app, globally removed, region-specific availability, network timeout, conflicting
 lookup/page signals, malformed lookup response, 429/5xx never mistaken for removal.
+Change detection runs against a temporary history: first sighting, recovery, error blips,
+changes hidden behind errors, separate storefronts.
 
 **Agent evaluation scenarios** (🚧). Each scenario provides recorded probe responses and
 history, and checks the agent's structured conclusion:

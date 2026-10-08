@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import sys
 
+from .changes import Change, ChangeKind, describe_signals
 from .models import CheckResult, Status
 
 ORDER = [Status.REMOVED, Status.UNCERTAIN, Status.ERROR,
@@ -62,3 +63,39 @@ def write_csv(results: list[CheckResult], path: str) -> None:
         w = csv.DictWriter(out, fieldnames=CSV_COLUMNS, extrasaction="ignore")
         w.writeheader()
         w.writerows(r.to_dict() for r in sorted(results, key=sort_key))
+
+
+def print_changes(changes: list[Change], unchanged: int, previous_runs: int) -> None:
+    dim, off, bold = color("dim"), color("off"), color("bold")
+    if previous_runs == 0:
+        print(f"\n{bold}History:{off} no previous runs. This run is the baseline.")
+        return
+
+    anomalies = [c for c in changes if c.kind is ChangeKind.STATUS_CHANGE]
+    failed = [c for c in changes if c.kind is ChangeKind.CHECK_FAILED]
+    new = [c for c in changes if c.kind is ChangeKind.NEW]
+    checked = unchanged + len(changes)
+
+    print(f"\n{bold}History:{off} compared with {previous_runs} previous run(s).")
+    print(f"{checked} apps checked. {unchanged} unchanged. "
+          f"{len(anomalies)} status change(s), {len(failed)} failed check(s), {len(new)} new.")
+
+    if anomalies:
+        print(f"\n{bold}Status changes:{off}")
+        for c in sorted(anomalies, key=lambda c: c.label.lower()):
+            print(f"  {bold}{c.label}{off}  {c.app_id}@{c.country}  "
+                  f"{color(c.previous)}{c.previous.value}{off} → {color(c.current)}{c.current.value}{off}")
+            print(f"    {dim}now:    {describe_signals(c.current_signals)}{off}")
+            print(f"    {dim}before: {describe_signals(c.previous_signals)} (run {c.previous_run_id}){off}")
+    if failed:
+        print(f"\n{bold}Failed checks{off} {dim}(app state unknown; rerun before drawing conclusions){off}")
+        for c in sorted(failed, key=lambda c: c.label.lower()):
+            prev = c.previous.value if c.previous else "no history"
+            print(f"  {c.label}  {dim}last known: {prev} · consecutive errors: "
+                  f"{c.consecutive_errors} · {c.current_detail}{off}")
+
+
+def print_timeline(entries: list[dict]) -> None:
+    for e in entries:
+        print(f"  {e['checked_at']}  {e['country']}  {e['status']:<9}  "
+              f"{describe_signals(e.get('signals') or {})}")
