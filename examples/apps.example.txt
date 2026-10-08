@@ -1,0 +1,21 @@
+# App Store Monitor input example
+# Format: <label> <TAB> <App Store URL>  (2+ spaces or a comma also work)
+# The storefront country is read from the URL (/us/, /gb/, /tr/...).
+# Lines starting with '#' are comments.
+
+Instagram	https://apps.apple.com/us/app/instagram/id389801252
+WhatsApp	https://apps.apple.com/us/app/whatsapp-messenger/id310633997
+Spotify	https://apps.apple.com/us/app/spotify-music-and-podcasts/id324684580
+YouTube	https://apps.apple.com/us/app/youtube/id544007664
+Netflix	https://apps.apple.com/us/app/netflix/id363590051
+Duolingo	https://apps.apple.com/gb/app/duolingo-language-lessons/id570060128
+Google Maps	https://apps.apple.com/us/app/google-maps/id585027354
+TikTok	https://apps.apple.com/us/app/tiktok/id835599320
+Telegram	https://apps.apple.com/us/app/telegram-messenger/id686449807
+
+# A bare numeric ID works too; the name comes from the lookup API.
+368677368
+
+# Lines without an App Store link are reported but not checked.
+Some Beta Build	https://testflight.apple.com/join/EXAMPLE
+Idea Without Link
