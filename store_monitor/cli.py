@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 
 from .changes import detect_changes
 from .checker import check_all
+from pathlib import Path
+
+from . import investigation as inv
 from .history import DEFAULT_STATE_DIR, History, build_baselines
 from .models import Status
-from .parsing import parse_lines
-from .report import print_changes, print_report, print_timeline, write_csv
+from .parsing import BARE_ID_RE, parse_lines
+from .probe import probe
+from .report import (print_changes, print_conclusion, print_report, print_timeline,
+                     print_tool_call, write_csv)
 from .store_client import StoreClient
 
 ONLY = {
@@ -47,7 +53,73 @@ def cmd_check(args) -> int:
     print_changes(changes, unchanged, len(runs))
     run = history.save_run(results, args.input, [c.to_dict() for c in changes])
     print(f"\nRun saved: {history.runs_dir / run.run_id}.json")
+
+    anomalies = inv.anomalies_of(run)
+    if not anomalies:
+        return 0
+    # Human in the loop: detection is automatic, investigation needs a yes.
+    if args.input == "-" or not sys.stdin.isatty():
+        print(f"\nTo investigate: python3 -m store_monitor investigate {run.run_id}")
+        return 0
+    answer = input(f"\nInvestigate {len(anomalies)} status change(s) with Claude Code? [y/N] ")
+    if answer.strip().lower() not in ("y", "yes"):
+        print(f"Skipped. Later: python3 -m store_monitor investigate {run.run_id}")
+        return 0
+    return investigate_run(run, history, Path(args.state_dir), args.model, args.max_budget_usd)
+
+
+def investigate_run(run, history, state_dir: Path, model, budget) -> int:
+    case = inv.build_case(run, history, state_dir)
+    case_path = inv.write_case(case, state_dir)
+    if not inv.claude_available():
+        print(f"Claude Code CLI ('claude') not found. Case written to {case_path}.\n"
+              f"Open Claude Code in this repository and run:\n"
+              f"  /investigate-store-anomaly {case_path}")
+        return 1
+    print(f"\nInvestigating {len(case['anomalies'])} status change(s)... "
+          f"(case: {case_path})")
+    outcome = inv.run_investigation(case, state_dir, model, budget,
+                                    on_tool_call=print_tool_call)
+    print_conclusion(outcome)
+    print(f"\nSaved: {inv.case_dir(state_dir, run.run_id)}/conclusion.json")
+    return 0 if outcome["valid"] else 1
+
+
+def cmd_investigate(args) -> int:
+    history = History(args.state_dir)
+    runs = history.load_runs()
+    if args.run_id:
+        run = next((r for r in runs if r.run_id == args.run_id), None)
+        if run is None:
+            print(f"No run {args.run_id} in {history.runs_dir}.", file=sys.stderr)
+            return 2
+    else:
+        run = next((r for r in reversed(runs) if inv.anomalies_of(r)), None)
+        if run is None:
+            print("No run with status changes to investigate.")
+            return 0
+    if not inv.anomalies_of(run):
+        print(f"Run {run.run_id} has no status changes to investigate.")
+        return 0
+    return investigate_run(run, history, Path(args.state_dir), args.model, args.max_budget_usd)
+
+
+def cmd_probe(args) -> int:
+    # Arguments may come from the agent: accept only well-formed IDs and country codes.
+    countries = [c.strip().lower() for c in args.countries.split(",") if c.strip()]
+    if not BARE_ID_RE.match(args.app_id) or not countries or \
+            not all(re.fullmatch(r"[a-z]{2}", c) for c in countries):
+        print("probe needs a numeric app ID and 2-letter country codes (e.g. us,gb).",
+              file=sys.stderr)
+        return 2
+    print(json.dumps(probe(args.app_id, countries, StoreClient()), indent=2, ensure_ascii=False))
     return 0
+
+
+def add_agent_args(p) -> None:
+    p.add_argument("--model", help="Claude model for the investigation (default: Claude Code's)")
+    p.add_argument("--max-budget-usd", type=float, default=1.0,
+                   help="Spending cap for one investigation (default: 1.0)")
 
 
 def cmd_history(args) -> int:
@@ -95,7 +167,20 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Don't compare with or save to local history")
     c.add_argument("--state-dir", default=DEFAULT_STATE_DIR,
                    help=f"Local state directory (default: {DEFAULT_STATE_DIR})")
+    add_agent_args(c)
     c.set_defaults(func=cmd_check)
+
+    i = sub.add_parser("investigate",
+                       help="Investigate a run's status changes with Claude Code (read-only agent)")
+    i.add_argument("run_id", nargs="?", help="Run to investigate (default: latest with changes)")
+    i.add_argument("--state-dir", default=DEFAULT_STATE_DIR)
+    add_agent_args(i)
+    i.set_defaults(func=cmd_investigate)
+
+    p = sub.add_parser("probe", help="Fresh read-only lookup + page signals for one app (JSON)")
+    p.add_argument("app_id")
+    p.add_argument("--countries", default="us", help="Comma-separated storefronts (default: us)")
+    p.set_defaults(func=cmd_probe)
 
     h = sub.add_parser("history", help="List past runs, or one app's timeline")
     h.add_argument("app_id", nargs="?", help="Show the timeline of this app ID")

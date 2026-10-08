@@ -12,7 +12,7 @@ The first (and currently only) component is **App Store Monitor**.
 > |---|---|
 > | Deterministic checker as a package, offline tests | ✅ |
 > | Local run history + change/anomaly detection | ✅ |
-> | Human-approved agentic investigation (Claude Code) | 🚧 |
+> | Human-approved agentic investigation (Claude Code) | ✅ |
 > | Agent evaluation scenarios | 🚧 |
 
 ---
@@ -119,7 +119,8 @@ V1 uses **supervised autonomy (human in the loop)**:
 
 ## 7. Running locally
 
-Requires Python 3.10+. No third-party dependencies.
+Requires Python 3.10+. No third-party dependencies. Investigations additionally need the
+[Claude Code](https://claude.com/claude-code) CLI (`claude`) installed and logged in.
 
 ```bash
 git clone https://github.com/rcanbaba/mobile-app-intelligence.git
@@ -141,6 +142,11 @@ python3 -m store_monitor check --no-history           # one-off check, nothing s
 python3 -m store_monitor history                      # list past runs
 python3 -m store_monitor history 389801252            # one app's timeline
 python3 -m store_monitor history 389801252 --json     # machine-readable
+
+# investigation (also offered interactively after a check with status changes)
+python3 -m store_monitor investigate                  # latest run with status changes
+python3 -m store_monitor investigate 20261008T091500Z --model sonnet --max-budget-usd 0.5
+python3 -m store_monitor probe 389801252 --countries us,gb,tr   # the agent's probe tool, JSON
 ```
 
 Every `check` compares the new results with local history and then saves the run to
@@ -216,19 +222,48 @@ Status changes:
     before: lookup found, page 200 (run 20261008T091500Z)
 ```
 
-## 10. Agent investigation 🚧
+## 10. Agent investigation
 
-The plan for V1:
+When a check finds status changes, the CLI asks:
 
-- **Sees:** the detected changes, each with current and previous signals, plus the app's history.
-- **Can use (read-only):** probe the app in other storefronts, re-run the check to retry
-  conflicting signals, read current public metadata, read local monitoring history.
-- **Cannot:** fetch arbitrary URLs, write files, touch App Store Connect, or take any action.
-- **Returns** a structured conclusion: classification, evidence, likely explanation,
-  confidence, remaining uncertainty, recommended human action. Low-evidence cases must say so.
+```
+Investigate 2 status change(s) with Claude Code? [y/N]
+```
 
-Claude Code itself is the agent runtime (a project skill + headless `claude -p` with a
-restricted tool list), so V1 needs no separate LLM backend.
+Answering `y` (or later running `python3 -m store_monitor investigate`) starts one
+headless Claude Code session. On `N`, or when input is piped, nothing runs.
+
+| | |
+|---|---|
+| **Instructions** | [`.claude/skills/investigate-store-anomaly/SKILL.md`](.claude/skills/investigate-store-anomaly/SKILL.md): method, classifications, confidence rules. The same file is an interactive Claude Code skill (`/investigate-store-anomaly <case.json>`) and the system prompt of the headless run, so the two can't drift apart. |
+| **Context (what it sees)** | A *case* with only the anomalies of one run: previous → current status, the raw signals behind both, and each app's timeline. Not the whole portfolio. |
+| **Tools (what it can use)** | `store_monitor probe` (fresh lookup + page per storefront; rerunning it is how the agent retries) and `store_monitor history --json`. These are the same deterministic code paths the monitor uses. |
+| **Cannot** | Use any other command or tool, fetch arbitrary URLs, write files, or load your personal Claude Code settings or MCP servers. The run uses `--tools Bash`, an allowlist of the two commands, `--setting-sources project`, `--strict-mcp-config`, and a `--max-budget-usd` cap. Blocked calls are recorded. |
+| **Output** | A JSON-schema-enforced conclusion per anomaly: `classification`, `evidence[]` (each tagged `case` / `probe` / `history`), `likely_explanation`, `confidence`, `remaining_uncertainty`, `recommended_human_action`. |
+| **Guardrail** | The conclusion is validated again in code: every anomaly answered exactly once, valid enums, evidence present, no `INCONCLUSIVE` with `high` confidence. Failures are reported, not hidden. |
+| **Saved** | `.monitor/investigations/<run_id>/`: `case.json`, `trace.jsonl` (full event stream), `conclusion.json` (conclusion, tool-call trace, validation result, cost). |
+
+Classifications: `REMOVED_GLOBALLY`, `REGIONAL_UNAVAILABILITY`, `RECOVERED`,
+`TRANSIENT_SIGNAL`, `PERSISTENT_CONFLICT`, `INCONCLUSIVE`.
+
+Example, with a simulated `LIVE → REMOVED` record for a live app:
+
+```
+  → python3 -m store_monitor probe 389801252 --countries us,gb,de,jp,tr; python3 -m store_monitor history 389801252 --json
+  → python3 -m store_monitor probe 389801252 --countries us
+
+Instagram  389801252@us
+  Classification: TRANSIENT_SIGNAL  (confidence: high)
+  Evidence:
+    - [case] Run recorded REMOVED: us lookup empty, page 404, gb fallback empty; previous run LIVE
+    - [probe] All five storefronts (us, gb, de, jp, tr): lookup found v450.1.0, page 200
+    - [probe] A second us probe confirms: lookup found, page 200
+  Likely explanation: The REMOVED result does not reproduce; the current status matches the previous LIVE...
+  Remaining uncertainty: Public data can't tell whether the REMOVED record came from a brief Apple inconsistency...
+  Recommended action: No store action needed; confirm the next check records LIVE.
+
+2 tool call(s) · 4 turns · $0.127
+```
 
 ## 11. Evaluation strategy
 
@@ -252,7 +287,10 @@ history, and checks the agent's structured conclusion:
 | Malformed responses | Doesn't treat parse failures as removal |
 
 Graded on: valid output schema, correct classification, evidence cited for each claim,
-calibrated confidence, and staying inside the allowed tools.
+calibrated confidence, and staying inside the allowed tools. The schema and guardrail
+checks already run on every real investigation (`validate_conclusion`). The
+investigation plumbing (case building, command flags, trace parsing, validation) is
+unit-tested with a fake event stream, so no model call is needed.
 
 ## 12. Privacy and safety
 

@@ -99,3 +99,35 @@ def print_timeline(entries: list[dict]) -> None:
     for e in entries:
         print(f"  {e['checked_at']}  {e['country']}  {e['status']:<9}  "
               f"{describe_signals(e.get('signals') or {})}")
+
+
+def print_tool_call(call: dict) -> None:
+    cmd = (call.get("input") or {}).get("command") or call.get("tool")
+    print(f"  {color('dim')}→ {cmd}{color('off')}", flush=True)
+
+
+def print_conclusion(outcome: dict) -> None:
+    dim, off, bold = color("dim"), color("off"), color("bold")
+    conclusion = outcome.get("conclusion") or {}
+    if conclusion.get("summary"):
+        print(f"\n{bold}Summary:{off} {conclusion['summary']}")
+    for it in conclusion.get("investigations") or []:
+        print(f"\n{bold}{it.get('label')}{off}  {it.get('app_id')}@{it.get('country')}")
+        print(f"  Classification: {bold}{it.get('classification')}{off}"
+              f"  (confidence: {it.get('confidence')})")
+        print("  Evidence:")
+        for ev in it.get("evidence") or []:
+            print(f"    - [{ev.get('source')}] {ev.get('observation')}")
+        print(f"  Likely explanation: {it.get('likely_explanation')}")
+        print(f"  Remaining uncertainty: {it.get('remaining_uncertainty')}")
+        print(f"  Recommended action: {it.get('recommended_human_action')}")
+
+    print(f"\n{dim}{len(outcome['trace'])} tool call(s) · {outcome.get('num_turns')} turns · "
+          f"${outcome.get('cost_usd') or 0:.3f}{off}")
+    if outcome["permission_denials"]:
+        print(f"{color(Status.UNCERTAIN)}Blocked tool calls: "
+              f"{len(outcome['permission_denials'])}{off}")
+    if outcome["problems"]:
+        print(f"{color(Status.REMOVED)}{bold}Conclusion failed validation:{off}")
+        for p in outcome["problems"]:
+            print(f"  - {p}")
