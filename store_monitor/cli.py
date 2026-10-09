@@ -21,6 +21,8 @@ from .report import (print_changes, print_conclusion, print_report, print_timeli
                      print_tool_call, write_csv)
 from .store_client import StoreClient
 
+DEFAULT_CSV = "results.csv"
+
 ONLY = {
     "live": {Status.LIVE},
     "removed": {Status.REMOVED},
@@ -42,7 +44,7 @@ def cmd_check(args) -> int:
     results = check_all(items, StoreClient(), args.workers, args.country)
     print_report(results, ONLY.get(args.only))
 
-    if args.csv:
+    if not args.no_csv:
         write_csv(results, args.csv)
         print(f"CSV written: {args.csv}")
 
@@ -163,7 +165,9 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--country", "-c", help="Force this storefront for every line (e.g. us)")
     c.add_argument("--default-country", default="us",
                    help="Storefront when a line has no country in its URL (default: us)")
-    c.add_argument("--csv", help="Also write results to this CSV file")
+    c.add_argument("--csv", default=DEFAULT_CSV,
+                   help=f"Write all results to this CSV file (default: {DEFAULT_CSV}, git-ignored)")
+    c.add_argument("--no-csv", action="store_true", help="Don't write a CSV file")
     c.add_argument("--workers", "-w", type=int, default=8, help="Parallel requests")
     c.add_argument("--only", choices=sorted(ONLY), help="Only print these statuses")
     c.add_argument("--no-history", action="store_true",
