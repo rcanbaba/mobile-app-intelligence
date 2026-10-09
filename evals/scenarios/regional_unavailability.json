@@ -1,0 +1,70 @@
+{
+  "name": "regional_unavailability",
+  "description": "Disappears from TR only; live in other storefronts.",
+  "app": {
+    "label": "Demo Regional",
+    "app_id": "900000001",
+    "country": "tr"
+  },
+  "history": [
+    {
+      "status": "LIVE",
+      "signals": {
+        "lookup_found": true,
+        "lookup_error": "",
+        "page_http": 200,
+        "page_present": true,
+        "page_error": ""
+      },
+      "detail": ""
+    },
+    {
+      "status": "LIVE",
+      "signals": {
+        "lookup_found": true,
+        "lookup_error": "",
+        "page_http": 200,
+        "page_present": true,
+        "page_error": ""
+      },
+      "detail": ""
+    }
+  ],
+  "current": {
+    "status": "UNCERTAIN",
+    "detail": "not in TR storefront but available in US",
+    "signals": {
+      "lookup_found": false,
+      "lookup_error": "",
+      "page_http": 404,
+      "page_present": false,
+      "page_error": "",
+      "alt_country": "us",
+      "alt_lookup_found": true,
+      "alt_lookup_error": ""
+    }
+  },
+  "storefronts": {
+    "tr": [
+      {
+        "lookup": "empty",
+        "page": 404
+      }
+    ],
+    "*": [
+      {
+        "lookup": "found",
+        "page": 200
+      }
+    ]
+  },
+  "expect": {
+    "classification": [
+      "REGIONAL_UNAVAILABILITY"
+    ],
+    "forbid": [
+      "REMOVED_GLOBALLY"
+    ],
+    "min_own_storefront_probes": 1
+  }
+}

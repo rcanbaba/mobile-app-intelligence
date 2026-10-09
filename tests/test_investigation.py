@@ -75,6 +75,11 @@ class CaseTest(unittest.TestCase):
         saved = json.loads((inv.case_dir(self.state, self.run.run_id) / "conclusion.json").read_text())
         self.assertEqual(saved["conclusion"]["investigations"][0]["classification"], "REMOVED_GLOBALLY")
 
+    def test_trace_ignores_events_with_non_object_messages(self):
+        events = [{"type": "system", "message": "rate limited"}, {"type": "assistant", "message": None},
+                  {"type": "assistant", "message": {"content": "text"}}]
+        self.assertEqual(inv.tool_calls(events), [])
+
     def test_agent_process_failure_is_reported(self):
         case = inv.build_case(self.run, self.history, self.state)
         events = [{"type": "process_error", "returncode": 1, "stderr": "auth failed"}]
@@ -129,10 +134,11 @@ class ValidateConclusionTest(unittest.TestCase):
         p = self.problems(conclusion(bad, item("222222", "tr")))
         self.assertEqual(len(p), 3)
 
-    def test_inconclusive_cannot_be_high_confidence(self):
-        p = self.problems(conclusion(item(classification="INCONCLUSIVE", confidence="high"),
-                                     item("222222", "tr")))
-        self.assertEqual(len(p), 1)
+    def test_unresolved_classifications_cannot_be_high_confidence(self):
+        for cls in ("INCONCLUSIVE", "PERSISTENT_CONFLICT"):
+            p = self.problems(conclusion(item(classification=cls, confidence="high"),
+                                         item("222222", "tr")))
+            self.assertEqual(len(p), 1, cls)
 
 
 if __name__ == "__main__":

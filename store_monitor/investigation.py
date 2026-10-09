@@ -4,7 +4,10 @@ Boundaries:
 - Context: the agent sees only the anomalies of one run plus their history,
   not the whole portfolio.
 - Tools: two read-only CLI commands (probe, history). No web access, no file writes,
-  and user-level Claude Code settings/MCP servers are not loaded.
+  and user-level Claude Code settings/MCP servers are not loaded. The agent runs in
+  an empty temporary directory: Claude Code auto-approves some read-only shell
+  commands (ls, cat, wc...) inside the working directory, and the repository holds
+  private files (apps.txt, .monitor/) the agent must not see.
 - Output: a JSON schema enforced by Claude Code, then validated again here,
   because the rest of the system must not depend on model output being well-formed.
 - Autonomy: this module only runs after a human approves it.
@@ -13,8 +16,10 @@ Boundaries:
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -26,6 +31,8 @@ SKILL_FILE = REPO_ROOT / ".claude" / "skills" / "investigate-store-anomaly" / "S
 CLASSIFICATIONS = ["REMOVED_GLOBALLY", "REGIONAL_UNAVAILABILITY", "RECOVERED",
                    "TRANSIENT_SIGNAL", "PERSISTENT_CONFLICT", "INCONCLUSIVE"]
 CONFIDENCE = ["low", "medium", "high"]
+# Classifications that mean "the real state is unknown": never high confidence.
+UNRESOLVED = {"PERSISTENT_CONFLICT", "INCONCLUSIVE"}
 EVIDENCE_SOURCES = ["case", "probe", "history"]
 
 CONCLUSION_SCHEMA = {
@@ -63,9 +70,10 @@ CONCLUSION_SCHEMA = {
 # --- case: the agent's context -------------------------------------------------
 
 def tool_commands(state_dir: Path) -> dict[str, str]:
-    sd = "" if state_dir.resolve() == (REPO_ROOT / ".monitor") else f" --state-dir {state_dir.resolve()}"
+    # Absolute path: the agent's working directory is not the repository.
     return {"probe": "python3 -m store_monitor probe <app_id> --countries <cc,cc,...>",
-            "history": f"python3 -m store_monitor history <app_id> --json{sd}"}
+            "history": f"python3 -m store_monitor history <app_id> --json "
+                       f"--state-dir {Path(state_dir).resolve()}"}
 
 
 def anomalies_of(run: Run) -> list[dict]:
@@ -136,9 +144,12 @@ def claude_available() -> bool:
     return shutil.which("claude") is not None
 
 
-def stream_events(cmd: list[str]) -> Iterable[dict]:
-    with subprocess.Popen(cmd, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          stdin=subprocess.DEVNULL, text=True) as proc:
+def stream_events(cmd: list[str], env: dict | None = None) -> Iterable[dict]:
+    """Run the agent in an empty sandbox directory; the package is found via PYTHONPATH."""
+    env = {**(env if env is not None else os.environ), "PYTHONPATH": str(REPO_ROOT)}
+    with tempfile.TemporaryDirectory(prefix="store-monitor-agent-") as workdir, \
+            subprocess.Popen(cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             stdin=subprocess.DEVNULL, text=True, env=env) as proc:
         for line in proc.stdout:
             line = line.strip()
             if line:
@@ -155,7 +166,8 @@ def tool_calls(events: list[dict]) -> list[dict]:
     """The investigation trace: each tool call and whether it succeeded."""
     calls, by_id = [], {}
     for e in events:
-        content = (e.get("message") or {}).get("content") or []
+        msg = e.get("message")
+        content = msg.get("content") if isinstance(msg, dict) else None
         if not isinstance(content, list):
             continue
         for c in content:
@@ -234,8 +246,8 @@ def validate_conclusion(conclusion, case: dict) -> list[str]:
             problems.append(f"{key}: unknown confidence {it.get('confidence')!r}")
         if not it.get("evidence"):
             problems.append(f"{key}: no evidence cited")
-        if it.get("classification") == "INCONCLUSIVE" and it.get("confidence") == "high":
-            problems.append(f"{key}: INCONCLUSIVE with high confidence is contradictory")
+        if it.get("classification") in UNRESOLVED and it.get("confidence") == "high":
+            problems.append(f"{key}: {it['classification']} with high confidence is contradictory")
     for key in sorted(expected - set(seen)):
         problems.append(f"{key}: anomaly not investigated")
     for key in sorted({k for k in seen if seen.count(k) > 1}):

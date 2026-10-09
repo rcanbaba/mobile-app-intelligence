@@ -36,7 +36,9 @@ python3 -m store_monitor history <app_id> --json               # every recorded 
 ```
 
 `probe` hits Apple's public endpoints live, so running it again retries a conflicting
-signal. These are your only tools. You cannot fetch other URLs, write files or change anything.
+signal. These are your only tools. Run only these two commands, never any other shell
+command, not even harmless ones like `echo`, `cat` or `jq`. Chaining them with `;` is fine.
+You cannot fetch other URLs, read other files, write files or change anything.
 
 ## Method
 
@@ -74,8 +76,11 @@ For each anomaly:
 - Public store data can't tell you *why* an app was removed (developer action,
   Apple review, legal). Never present a reason as fact. Say it is unknown, or name
   possibilities as possibilities.
-- Confidence: `high` only when several independent signals agree and the result
-  reproduced; `medium` when the picture is consistent but rests on one probe round or
+- Confidence is about **the app's real availability state** (what `likely_explanation`
+  claims), not about whether you observed the signals correctly. A conflict you
+  reproduced perfectly is still an unknown state, so `PERSISTENT_CONFLICT` and
+  `INCONCLUSIVE` are never `high`. Use `high` only when several independent signals
+  agree and the result reproduced; `medium` when the picture is consistent but rests on one probe round or
   one signal type; `low` when signals conflict, requests failed, or history is thin.
 - `recommended_human_action` is a suggestion for a person (e.g. "check App Store
   Connect availability settings for TR"), never something you did.
