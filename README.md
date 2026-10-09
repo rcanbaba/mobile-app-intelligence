@@ -130,8 +130,8 @@ python3 -m store_monitor check examples/apps.example.txt
 
 # your own list (git-ignored)
 cp examples/apps.example.txt apps.txt
-python3 -m store_monitor check                        # reads apps.txt
-python3 -m store_monitor check apps.txt --csv out.csv # also export CSV
+python3 -m store_monitor check                        # reads apps.txt, writes results.csv
+python3 -m store_monitor check --csv out.csv          # CSV to another path (--no-csv: none)
 python3 -m store_monitor check --only problem         # REMOVED/UNCERTAIN/ERROR/...
 python3 -m store_monitor check -w 12                  # 12 parallel workers
 pbpaste | python3 -m store_monitor check -            # from clipboard (macOS)
@@ -148,8 +148,9 @@ python3 -m store_monitor investigate 20261008T091500Z --model sonnet --max-budge
 python3 -m store_monitor probe 389801252 --countries us,gb,tr   # the agent's probe tool, JSON
 ```
 
-Every `check` compares the new results with local history and then saves the run to
-`.monitor/runs/` (git-ignored; `--state-dir` changes the location).
+Every `check` writes the full result list to `results.csv` for review in a spreadsheet,
+compares the new results with local history, and saves the run to `.monitor/runs/`.
+Both are git-ignored (`--state-dir` changes the history location).
 
 Tests run offline. Network responses are scripted:
 
