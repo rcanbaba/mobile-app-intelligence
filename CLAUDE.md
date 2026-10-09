@@ -14,6 +14,7 @@ Python 3.10+, standard library only (no runtime or test dependencies).
 python3 -m store_monitor check examples/apps.example.txt   # run against public examples
 python3 -m unittest                                        # all tests (offline)
 python3 -m unittest tests.test_checker.ClassificationTest.test_globally_removed_app  # one test
+python3 -m evals.run [scenario ...] [--trials N] [--model M]   # agent evals: real Claude calls, costs money
 ```
 
 ## Architecture
@@ -21,9 +22,10 @@ python3 -m unittest tests.test_checker.ClassificationTest.test_globally_removed_
 - `store_client.py` is the **only** module that does network I/O (`StoreClient`, with an injectable `opener` and `sleep`). Retries cover network errors, 429 and 5xx. The page signal is tri-state: only 404/410 mean "gone", other failures are `None` (unknown).
 - `checker.py` maps the two signals (lookup + page, plus one fallback-storefront lookup) to `Status`. It records raw signals in `CheckResult.signals` for history and investigations.
 - `history.py` stores one JSON file per run in `.monitor/runs/` (run ID = UTC timestamp, so names sort by time). `build_baselines` finds each app's last known non-ERROR result, keyed by `app_id@country`. `changes.py` compares the current run with those baselines (NEW / CHECK_FAILED / STATUS_CHANGE). Only STATUS_CHANGE counts as an anomaly worth investigating.
-- `investigation.py` runs only after human approval (the `[y/N]` prompt in `check`, or the `investigate` command). It builds a case (one run's anomalies plus their timelines), then runs headless `claude -p` with `--tools Bash`, an allowlist of `store_monitor probe`/`history`, `--setting-sources project`, `--strict-mcp-config`, a budget cap, and `--json-schema` (`CONCLUSION_SCHEMA`). It re-validates the output in `validate_conclusion` and writes `case.json`, `trace.jsonl` and `conclusion.json` to `.monitor/investigations/<run_id>/`.
+- `investigation.py` runs only after human approval (the `[y/N]` prompt in `check`, or the `investigate` command). It builds a case (one run's anomalies plus their timelines), then runs headless `claude -p` with `--tools Bash`, an allowlist of `store_monitor probe`/`history`, `--setting-sources project`, `--strict-mcp-config`, a budget cap, and `--json-schema` (`CONCLUSION_SCHEMA`). The agent runs in an empty temp directory with `PYTHONPATH` pointing at the repo, because Claude Code auto-approves read-only shell commands inside the working directory and the repo holds private files. It re-validates the output in `validate_conclusion` and writes `case.json`, `trace.jsonl` and `conclusion.json` to `.monitor/investigations/<run_id>/`.
 - The agent's instructions live only in `.claude/skills/investigate-store-anomaly/SKILL.md`. The headless run appends that file's body as the system prompt. Keep its classification list in sync with `CLASSIFICATIONS` (a test enforces this).
 - `probe.py` returns raw per-storefront signals (no verdict). It is the agent's main tool and validates its arguments, because they come from the model.
+- `evals/run.py` builds a throwaway world per scenario (`evals/scenarios/*.json`: history, current result, recorded store responses), runs the real investigation with `STORE_MONITOR_FIXTURE` set so `probe` replays responses via `fixture_client.py`, and grades the result in code. When you change the skill, schema or agent flags, rerun the evals.
 - `models.py` holds the shared contracts. `parsing.py` handles input lines. `report.py` only presents results. `cli.py` is the argparse entry point (`check`, `history`, `probe`, `investigate`).
 - Tests use `tests/fakes.py` (`FakeClient` for checker scenarios, `ScriptedOpener` for HTTP behavior). Never hit the network in tests.
 

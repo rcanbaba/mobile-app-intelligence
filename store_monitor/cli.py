@@ -12,6 +12,7 @@ from .checker import check_all
 from pathlib import Path
 
 from . import investigation as inv
+from .fixture_client import client_from_env
 from .history import DEFAULT_STATE_DIR, History, build_baselines
 from .models import Status
 from .parsing import BARE_ID_RE, parse_lines
@@ -112,7 +113,9 @@ def cmd_probe(args) -> int:
         print("probe needs a numeric app ID and 2-letter country codes (e.g. us,gb).",
               file=sys.stderr)
         return 2
-    print(json.dumps(probe(args.app_id, countries, StoreClient()), indent=2, ensure_ascii=False))
+    # Evals point STORE_MONITOR_FIXTURE at recorded responses; normally this is live.
+    client = client_from_env() or StoreClient()
+    print(json.dumps(probe(args.app_id, countries, client), indent=2, ensure_ascii=False))
     return 0
 
 

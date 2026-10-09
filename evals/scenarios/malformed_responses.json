@@ -1,0 +1,66 @@
+{
+  "name": "malformed_responses",
+  "description": "Recorded REMOVED; fresh lookups return malformed JSON while pages load fine.",
+  "app": {
+    "label": "Demo Malformed",
+    "app_id": "900000007",
+    "country": "us"
+  },
+  "history": [
+    {
+      "status": "LIVE",
+      "signals": {
+        "lookup_found": true,
+        "lookup_error": "",
+        "page_http": 200,
+        "page_present": true,
+        "page_error": ""
+      },
+      "detail": ""
+    },
+    {
+      "status": "LIVE",
+      "signals": {
+        "lookup_found": true,
+        "lookup_error": "",
+        "page_http": 200,
+        "page_present": true,
+        "page_error": ""
+      },
+      "detail": ""
+    }
+  ],
+  "current": {
+    "status": "REMOVED",
+    "detail": "empty lookup + page 404",
+    "signals": {
+      "lookup_found": false,
+      "lookup_error": "",
+      "page_http": 404,
+      "page_present": false,
+      "page_error": "",
+      "alt_country": "gb",
+      "alt_lookup_found": false,
+      "alt_lookup_error": ""
+    }
+  },
+  "storefronts": {
+    "*": [
+      {
+        "lookup": "malformed",
+        "page": 200
+      }
+    ]
+  },
+  "expect": {
+    "classification": [
+      "INCONCLUSIVE",
+      "TRANSIENT_SIGNAL",
+      "PERSISTENT_CONFLICT"
+    ],
+    "forbid": [
+      "REMOVED_GLOBALLY"
+    ],
+    "max_confidence": "medium"
+  }
+}

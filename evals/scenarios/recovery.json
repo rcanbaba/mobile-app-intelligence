@@ -1,0 +1,77 @@
+{
+  "name": "recovery",
+  "description": "Removed for two runs, now live everywhere.",
+  "app": {
+    "label": "Demo Recovered",
+    "app_id": "900000004",
+    "country": "gb"
+  },
+  "history": [
+    {
+      "status": "LIVE",
+      "signals": {
+        "lookup_found": true,
+        "lookup_error": "",
+        "page_http": 200,
+        "page_present": true,
+        "page_error": ""
+      },
+      "detail": ""
+    },
+    {
+      "status": "REMOVED",
+      "signals": {
+        "lookup_found": false,
+        "lookup_error": "",
+        "page_http": 404,
+        "page_present": false,
+        "page_error": "",
+        "alt_country": "us",
+        "alt_lookup_found": false,
+        "alt_lookup_error": ""
+      },
+      "detail": ""
+    },
+    {
+      "status": "REMOVED",
+      "signals": {
+        "lookup_found": false,
+        "lookup_error": "",
+        "page_http": 404,
+        "page_present": false,
+        "page_error": "",
+        "alt_country": "us",
+        "alt_lookup_found": false,
+        "alt_lookup_error": ""
+      },
+      "detail": ""
+    }
+  ],
+  "current": {
+    "status": "LIVE",
+    "detail": "",
+    "signals": {
+      "lookup_found": true,
+      "lookup_error": "",
+      "page_http": 200,
+      "page_present": true,
+      "page_error": ""
+    }
+  },
+  "storefronts": {
+    "*": [
+      {
+        "lookup": "found",
+        "page": 200
+      }
+    ]
+  },
+  "expect": {
+    "classification": [
+      "RECOVERED"
+    ],
+    "forbid": [
+      "REMOVED_GLOBALLY"
+    ]
+  }
+}
